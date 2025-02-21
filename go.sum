@@ -612,8 +612,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/labstack/echo/v4 v4.2.1/go.mod h1:AA49e0DZ8kk5jTOOCKNuPR6oTnBS0dYiM4FW1e6jwpg=
 github.com/labstack/gommon v0.3.0/go.mod h1:MULnywXg0yavhxWKc+lOruYdAhDwPK9wf0OL7NoOu+k=
-github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250219114333-55aa3915ceab h1:z1IPagZniFXUueGriWw5I58Ua5ZZmWCXfypdQflsvPQ=
-github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250219114333-55aa3915ceab/go.mod h1:jfG/bgq2se81dF4a0G5bA7w1pglrUJoambBmNx7dTZI=
+github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250221104627-92b6e82cae3f h1:Sve9wt6Sn5TO45hmHHoZWboWelpt5n/HTOuKstVK0Gc=
+github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250221104627-92b6e82cae3f/go.mod h1:jfG/bgq2se81dF4a0G5bA7w1pglrUJoambBmNx7dTZI=
 github.com/leanovate/gopter v0.2.9 h1:fQjYxZaynp97ozCzfOyOuAGOU4aU/z37zf/tOujFk7c=
 github.com/leanovate/gopter v0.2.9/go.mod h1:U2L/78B+KVFIx2VmW6onHJQzXtFb+p5y3y2Sh+Jxxv8=
 github.com/leodido/go-urn v1.2.0 h1:hpXL4XnriNwQ/ABnpepYM/1vCLWNDfUNts8dX3xTG6Y=

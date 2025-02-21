@@ -158,7 +158,7 @@ replace (
 	github.com/confio/ics23/go => github.com/cosmos/cosmos-sdk/ics23/go v0.8.0
 	github.com/cosmos/cosmos-sdk => github.com/sei-protocol/sei-cosmos v0.3.45
 	github.com/cosmos/iavl => github.com/sei-protocol/sei-iavl v0.1.9
-	github.com/cosmos/ibc-go/v4 => github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250219114333-55aa3915ceab
+	github.com/cosmos/ibc-go/v4 => github.com/lakshya-sky/kii-ibc-go/v4 v4.0.0-20250221104627-92b6e82cae3f
 	// Fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	// TODO Remove it: https://github.com/cosmos/cosmos-sdk/issues/10409
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.7.0
