@@ -3,28 +3,33 @@ package wasm
 import (
 	"math"
 
-	ibcexported "github.com/cosmos/ibc-go/v3/modules/core/exported"
-
 	wasmvmtypes "github.com/CosmWasm/wasmvm/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	capabilitytypes "github.com/cosmos/cosmos-sdk/x/capability/types"
-	channeltypes "github.com/cosmos/ibc-go/v3/modules/core/04-channel/types"
-	porttypes "github.com/cosmos/ibc-go/v3/modules/core/05-port/types"
-	host "github.com/cosmos/ibc-go/v3/modules/core/24-host"
+	channeltypes "github.com/cosmos/ibc-go/v4/modules/core/04-channel/types"
+	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
+	host "github.com/cosmos/ibc-go/v4/modules/core/24-host"
+	ibcexported "github.com/cosmos/ibc-go/v4/modules/core/exported"
 
 	types "github.com/CosmWasm/wasmd/x/wasm/types"
 )
 
 var _ porttypes.IBCModule = IBCHandler{}
 
-type IBCHandler struct {
-	keeper        types.IBCContractKeeper
-	channelKeeper types.ChannelKeeper
+// internal interface that is implemented by ibc middleware
+type appVersionGetter interface {
+	GetAppVersion(ctx sdk.Context, portID, channelID string) (string, bool)
 }
 
-func NewIBCHandler(k types.IBCContractKeeper, ck types.ChannelKeeper) IBCHandler {
-	return IBCHandler{keeper: k, channelKeeper: ck}
+type IBCHandler struct {
+	keeper           types.IBCContractKeeper
+	channelKeeper    types.ChannelKeeper
+	appVersionGetter appVersionGetter
+}
+
+func NewIBCHandler(k types.IBCContractKeeper, ck types.ChannelKeeper, vg appVersionGetter) IBCHandler {
+	return IBCHandler{keeper: k, channelKeeper: ck, appVersionGetter: vg}
 }
 
 // OnChanOpenInit implements the IBCModule interface
@@ -37,14 +42,14 @@ func (i IBCHandler) OnChanOpenInit(
 	chanCap *capabilitytypes.Capability,
 	counterParty channeltypes.Counterparty,
 	version string,
-) error {
+) (string, error) {
 	// ensure port, version, capability
 	if err := ValidateChannelParams(channelID); err != nil {
-		return err
+		return "", err
 	}
 	contractAddr, err := ContractFromPortID(portID)
 	if err != nil {
-		return sdkerrors.Wrapf(err, "contract port id")
+		return "", sdkerrors.Wrapf(err, "contract port id")
 	}
 
 	msg := wasmvmtypes.IBCChannelOpenMsg{
@@ -59,15 +64,22 @@ func (i IBCHandler) OnChanOpenInit(
 			},
 		},
 	}
-	_, err = i.keeper.OnOpenChannel(ctx, contractAddr, msg)
+	// Allow contracts to return a version (or default to proposed version if unset)
+	acceptedVersion, err := i.keeper.OnOpenChannel(ctx, contractAddr, msg)
+
 	if err != nil {
-		return err
+		return "", err
 	}
+
+	if acceptedVersion == "" {
+		acceptedVersion = version
+	}
+
 	// Claim channel capability passed back by IBC module
 	if err := i.keeper.ClaimCapability(ctx, chanCap, host.ChannelCapabilityPath(portID, channelID)); err != nil {
-		return sdkerrors.Wrap(err, "claim capability")
+		return "", sdkerrors.Wrap(err, "claim capability")
 	}
-	return nil
+	return acceptedVersion, nil
 }
 
 // OnChanOpenTry implements the IBCModule interface
@@ -148,9 +160,14 @@ func (i IBCHandler) OnChanOpenAck(
 	// OnChanOpenAck entry point)
 	// https://github.com/cosmos/ibc-go/pull/647/files#diff-54b5be375a2333c56f2ae1b5b4dc13ac9c734561e30286505f39837ee75762c7R25
 	i.channelKeeper.SetChannel(ctx, portID, channelID, channelInfo)
+
+	appVersion, ok := i.appVersionGetter.GetAppVersion(ctx, portID, channelID)
+	if !ok {
+		return sdkerrors.Wrapf(channeltypes.ErrInvalidChannelVersion, "app version not found for port ID (%s) channel ID (%s)", portID, channelID)
+	}
 	msg := wasmvmtypes.IBCChannelConnectMsg{
 		OpenAck: &wasmvmtypes.IBCOpenAck{
-			Channel:             toWasmVMChannel(portID, channelID, channelInfo),
+			Channel:             toWasmVMChannel(portID, channelID, channelInfo, appVersion),
 			CounterpartyVersion: counterpartyVersion,
 		},
 	}
@@ -167,9 +184,13 @@ func (i IBCHandler) OnChanOpenConfirm(ctx sdk.Context, portID, channelID string)
 	if !ok {
 		return sdkerrors.Wrapf(channeltypes.ErrChannelNotFound, "port ID (%s) channel ID (%s)", portID, channelID)
 	}
+	appVersion, ok := i.appVersionGetter.GetAppVersion(ctx, portID, channelID)
+	if !ok {
+		return sdkerrors.Wrapf(channeltypes.ErrInvalidChannelVersion, "app version not found for port ID (%s) channel ID (%s)", portID, channelID)
+	}
 	msg := wasmvmtypes.IBCChannelConnectMsg{
 		OpenConfirm: &wasmvmtypes.IBCOpenConfirm{
-			Channel: toWasmVMChannel(portID, channelID, channelInfo),
+			Channel: toWasmVMChannel(portID, channelID, channelInfo, appVersion),
 		},
 	}
 	return i.keeper.OnConnectChannel(ctx, contractAddr, msg)
@@ -185,9 +206,13 @@ func (i IBCHandler) OnChanCloseInit(ctx sdk.Context, portID, channelID string) e
 	if !ok {
 		return sdkerrors.Wrapf(channeltypes.ErrChannelNotFound, "port ID (%s) channel ID (%s)", portID, channelID)
 	}
+	appVersion, ok := i.appVersionGetter.GetAppVersion(ctx, portID, channelID)
+	if !ok {
+		return sdkerrors.Wrapf(channeltypes.ErrInvalidChannelVersion, "app version not found for port ID (%s) channel ID (%s)", portID, channelID)
+	}
 
 	msg := wasmvmtypes.IBCChannelCloseMsg{
-		CloseInit: &wasmvmtypes.IBCCloseInit{Channel: toWasmVMChannel(portID, channelID, channelInfo)},
+		CloseInit: &wasmvmtypes.IBCCloseInit{Channel: toWasmVMChannel(portID, channelID, channelInfo, appVersion)},
 	}
 	err = i.keeper.OnCloseChannel(ctx, contractAddr, msg)
 	if err != nil {
@@ -209,9 +234,13 @@ func (i IBCHandler) OnChanCloseConfirm(ctx sdk.Context, portID, channelID string
 	if !ok {
 		return sdkerrors.Wrapf(channeltypes.ErrChannelNotFound, "port ID (%s) channel ID (%s)", portID, channelID)
 	}
+	appVersion, ok := i.appVersionGetter.GetAppVersion(ctx, portID, channelID)
+	if !ok {
+		return sdkerrors.Wrapf(channeltypes.ErrInvalidChannelVersion, "app version not found for port ID (%s) channel ID (%s)", portID, channelID)
+	}
 
 	msg := wasmvmtypes.IBCChannelCloseMsg{
-		CloseConfirm: &wasmvmtypes.IBCCloseConfirm{Channel: toWasmVMChannel(portID, channelID, channelInfo)},
+		CloseConfirm: &wasmvmtypes.IBCCloseConfirm{Channel: toWasmVMChannel(portID, channelID, channelInfo, appVersion)},
 	}
 	err = i.keeper.OnCloseChannel(ctx, contractAddr, msg)
 	if err != nil {
@@ -222,12 +251,12 @@ func (i IBCHandler) OnChanCloseConfirm(ctx sdk.Context, portID, channelID string
 	return err
 }
 
-func toWasmVMChannel(portID, channelID string, channelInfo channeltypes.Channel) wasmvmtypes.IBCChannel {
+func toWasmVMChannel(portID, channelID string, channelInfo channeltypes.Channel, appVersion string) wasmvmtypes.IBCChannel {
 	return wasmvmtypes.IBCChannel{
 		Endpoint:             wasmvmtypes.IBCEndpoint{PortID: portID, ChannelID: channelID},
 		CounterpartyEndpoint: wasmvmtypes.IBCEndpoint{PortID: channelInfo.Counterparty.PortId, ChannelID: channelInfo.Counterparty.ChannelId},
 		Order:                channelInfo.Ordering.String(),
-		Version:              channelInfo.Version,
+		Version:              appVersion,
 		ConnectionID:         channelInfo.ConnectionHops[0], // At the moment this list must be of length 1. In the future multi-hop channels may be supported.
 	}
 }
@@ -240,12 +269,12 @@ func (i IBCHandler) OnRecvPacket(
 ) ibcexported.Acknowledgement {
 	contractAddr, err := ContractFromPortID(packet.DestinationPort)
 	if err != nil {
-		return channeltypes.NewErrorAcknowledgement(sdkerrors.Wrapf(err, "contract port id").Error())
+		return channeltypes.NewErrorAcknowledgement(sdkerrors.Wrapf(err, "contract port id"))
 	}
 	msg := wasmvmtypes.IBCPacketReceiveMsg{Packet: newIBCPacket(packet), Relayer: relayer.String()}
 	ack, err := i.keeper.OnRecvPacket(ctx, contractAddr, msg)
 	if err != nil {
-		return channeltypes.NewErrorAcknowledgement(err.Error())
+		return channeltypes.NewErrorAcknowledgement(err)
 	}
 	return ContractConfirmStateAck(ack)
 }
