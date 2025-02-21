@@ -78,8 +78,7 @@ func (coord *Coordinator) UpdateTime() {
 // UpdateTimeForChain updates the clock for a specific chain.
 func (coord *Coordinator) UpdateTimeForChain(chain *TestChain) {
 	chain.CurrentHeader.Time = coord.CurrentTime.UTC()
-	wasmApp := chain.App.(*TestingAppDecorator).WasmApp
-	wasmApp.BeginBlock(wasmApp.GetContextForDeliverTx([]byte{}), abci.RequestBeginBlock{Header: chain.CurrentHeader})
+	chain.App.BeginBlock(chain.GetContext(), abci.RequestBeginBlock{Header: chain.CurrentHeader})
 }
 
 // Setup constructs a TM client, connection, and channel on both chains provided. It will
@@ -193,9 +192,8 @@ func GetChainID(index int) string {
 // CONTRACT: the passed in list of indexes must not contain duplicates
 func (coord *Coordinator) CommitBlock(chains ...*TestChain) {
 	for _, chain := range chains {
-		wasmApp := chain.App.(*TestingAppDecorator).WasmApp
-		wasmApp.SetDeliverStateToCommit()
-		wasmApp.Commit(context.Background())
+		chain.App.SetDeliverStateToCommit()
+		chain.App.Commit(context.Background())
 		chain.NextBlock()
 	}
 	coord.IncrementTime()
@@ -204,9 +202,8 @@ func (coord *Coordinator) CommitBlock(chains ...*TestChain) {
 // CommitNBlocks commits n blocks to state and updates the block height by 1 for each commit.
 func (coord *Coordinator) CommitNBlocks(chain *TestChain, n uint64) {
 	for i := uint64(0); i < n; i++ {
-		wasmApp := chain.App.(*TestingAppDecorator).WasmApp
-		wasmApp.BeginBlock(wasmApp.GetContextForDeliverTx([]byte{}), abci.RequestBeginBlock{Header: chain.CurrentHeader})
-		wasmApp.SetDeliverStateToCommit()
+		chain.App.BeginBlock(chain.GetContext(), abci.RequestBeginBlock{Header: chain.CurrentHeader})
+		chain.App.SetDeliverStateToCommit()
 		chain.App.Commit(context.Background())
 		chain.NextBlock()
 		coord.IncrementTime()

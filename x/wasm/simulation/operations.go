@@ -1,8 +1,8 @@
 package simulation
 
 import (
-	"io/ioutil"
 	"math/rand"
+	"os"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	simappparams "github.com/cosmos/cosmos-sdk/simapp/params"
@@ -16,6 +16,7 @@ import (
 )
 
 // Simulation operation weights constants
+//
 //nolint:gosec
 const (
 	OpWeightMsgStoreCode           = "op_weight_msg_store_code"
@@ -60,7 +61,7 @@ func WeightedOperations(
 		},
 	)
 
-	wasmBz, err := ioutil.ReadFile(wasmContractPath)
+	wasmBz, err := os.ReadFile(wasmContractPath)
 	if err != nil {
 		panic(err)
 	}
